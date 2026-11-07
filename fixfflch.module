@@ -1,0 +1,56 @@
+<?php
+
+/**
+ * @file
+ * Módulo para agrupamento de rotinas e correções customizadas da FFLCH.
+ */
+
+use Drupal\Core\Asset\AttachedAssetsInterface;
+
+/**
+ * Helper para reescrever URLs do Asset Injector para a CDN dinamicamente.
+ */
+function _fixfflch_rewrite_asset_injector_cdn(&$assets_array) {
+  $cdn_domain = 'https://cdn.fflch.usp.br';
+
+  foreach ($assets_array as $key => &$asset) {
+    // Validação estrita: Intercepta APENAS arquivos do asset_injector
+    if (isset($asset['data']) && is_string($asset['data']) && strpos($asset['data'], 'asset_injector') !== FALSE) {
+      $data = $asset['data'];
+
+      // 1. Se for uma URI interna (public://), resolve via S3FS/Drupal do site atual
+      if (strpos($data, 'public://') === 0) {
+        $url = file_create_url($data);
+      } else {
+        $url = $data;
+      }
+
+      // 2. Extrai o caminho relativo preservando o subcaminho do site (/filosofia/, /sti/, etc.)
+      if (strpos($url, 'http://') === 0 || strpos($url, 'https://') === 0) {
+        $parsed_path = parse_url($url, PHP_URL_PATH);
+        $parsed_query = parse_url($url, PHP_URL_QUERY);
+        $final_url = $cdn_domain . $parsed_path . ($parsed_query ? '?' . $parsed_query : '');
+      } else {
+        $final_url = $cdn_domain . '/' . ltrim($url, '/');
+      }
+
+      // Define como ativo externo para impedir o Drupal de converter em caminho relativo
+      $asset['type'] = 'external';
+      $asset['data'] = $final_url;
+    }
+  }
+}
+
+/**
+ * Implements hook_css_alter().
+ */
+function fixfflch_css_alter(&$css, AttachedAssetsInterface $assets) {
+  _fixfflch_rewrite_asset_injector_cdn($css);
+}
+
+/**
+ * Implements hook_js_alter().
+ */
+function fixfflch_js_alter(&$javascript, AttachedAssetsInterface $assets) {
+  _fixfflch_rewrite_asset_injector_cdn($javascript);
+}

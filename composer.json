@@ -1,0 +1,13 @@
+{
+    "name": "fflch/fixfflch",
+    "type": "drupal-module",
+    "license": "GPL-2.0-or-later",
+    "description": "Ajustes e correções customizadas para os sites da FFLCH USP.",
+    "authors": [
+        {
+            "name": "Thiago Gomes Verissimo",
+            "email": "verissimotgv@gmail.com"
+        }
+    ],
+    "minimum-stability": "dev"
+}

@@ -1,0 +1,5 @@
+name: 'Fix FFLCH'
+type: module
+description: 'Ajustes e correções customizadas para os sites da FFLCH USP.'
+package: FFLCH
+core_version_requirement: ^8 || ^9 || ^10 || ^11
