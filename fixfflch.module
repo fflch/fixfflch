@@ -6,38 +6,64 @@
  */
 
 use Drupal\Core\Asset\AttachedAssetsInterface;
+use Drupal\fixfflch\CdnHelper;
+
+// Os arquivos no caminho antigo (/sites/SITE.fflch.usp.br/files/...) são
+// redirecionados para a CDN por
+// \Drupal\fixfflch\StackMiddleware\LegacyFilesRedirect.
+
+/**
+ * Diz se o asset é um arquivo gerado pelo Asset Injector.
+ *
+ * Os gerados ficam no diretório público com o nome
+ * asset_injector/[css|js]/[nome]-[md5].[css|js] (ver AssetFileStorage do
+ * asset_injector). Os arquivos do próprio módulo
+ * (modules/contrib/asset_injector/js/...) não seguem esse padrão.
+ */
+function _fixfflch_is_asset_injector_generated($data) {
+  return is_string($data)
+    && preg_match('#(^|/)asset_injector/(css|js)/[^/]+-[0-9a-f]{32}\.(css|js)(\?|$)#', $data);
+}
 
 /**
  * Helper para reescrever URLs do Asset Injector para a CDN dinamicamente.
  */
 function _fixfflch_rewrite_asset_injector_cdn(&$assets_array) {
-  $cdn_domain = 'https://cdn.fflch.usp.br';
+  // CDN desligada no ambiente local (ver CdnHelper::isEnabled()).
+  if (!CdnHelper::isEnabled(\Drupal::request()->getHost())) {
+    return;
+  }
+
+  $cdn_domain = CdnHelper::CDN_DOMAIN;
 
   foreach ($assets_array as $key => &$asset) {
-    // Validação estrita: Intercepta APENAS arquivos do asset_injector
-    if (isset($asset['data']) && is_string($asset['data']) && strpos($asset['data'], 'asset_injector') !== FALSE) {
-      $data = $asset['data'];
-
-      // 1. Se for uma URI interna (public://), resolve via S3FS/Drupal do site atual
-      if (strpos($data, 'public://') === 0) {
-        $url = file_create_url($data);
-      } else {
-        $url = $data;
-      }
-
-      // 2. Extrai o caminho relativo preservando o subcaminho do site (/filosofia/, /sti/, etc.)
-      if (strpos($url, 'http://') === 0 || strpos($url, 'https://') === 0) {
-        $parsed_path = parse_url($url, PHP_URL_PATH);
-        $parsed_query = parse_url($url, PHP_URL_QUERY);
-        $final_url = $cdn_domain . $parsed_path . ($parsed_query ? '?' . $parsed_query : '');
-      } else {
-        $final_url = $cdn_domain . '/' . ltrim($url, '/');
-      }
-
-      // Define como ativo externo para impedir o Drupal de converter em caminho relativo
-      $asset['type'] = 'external';
-      $asset['data'] = $final_url;
+    // Intercepta APENAS os arquivos gerados pelo asset_injector.
+    if (!isset($asset['data']) || !_fixfflch_is_asset_injector_generated($asset['data'])) {
+      continue;
     }
+    $data = $asset['data'];
+
+    // 1. Se for uma URI interna (public://), resolve via S3FS/Drupal do site atual
+    if (strpos($data, 'public://') === 0) {
+      $url = \Drupal::service('file_url_generator')->generateAbsoluteString($data);
+    }
+    else {
+      $url = $data;
+    }
+
+    // 2. Extrai o caminho relativo preservando o subcaminho do site (/filosofia/, /sti/, etc.)
+    if (strpos($url, 'http://') === 0 || strpos($url, 'https://') === 0) {
+      $parsed_path = parse_url($url, PHP_URL_PATH);
+      $parsed_query = parse_url($url, PHP_URL_QUERY);
+      $final_url = $cdn_domain . $parsed_path . ($parsed_query ? '?' . $parsed_query : '');
+    }
+    else {
+      $final_url = $cdn_domain . '/' . ltrim($url, '/');
+    }
+
+    // Define como ativo externo para impedir o Drupal de converter em caminho relativo
+    $asset['type'] = 'external';
+    $asset['data'] = $final_url;
   }
 }
 

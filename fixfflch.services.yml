@@ -1,0 +1,7 @@
+services:
+  # Redireciona /sites/SITE.fflch.usp.br/files/... para a CDN. Prioridade entre
+  # o reverse_proxy (300) e o page_cache (200).
+  fixfflch.legacy_files_redirect:
+    class: Drupal\fixfflch\StackMiddleware\LegacyFilesRedirect
+    tags:
+      - { name: http_middleware, priority: 260 }
